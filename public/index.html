@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>API Dashboard</title>
+  <style>
+    body { font-family: sans-serif; margin: 30px; }
+    input, button, textarea { margin: 8px; padding: 6px; }
+    .filter-group { margin: 15px 0; display: flex; gap: 10px; flex-wrap: wrap; }
+    .filter-group input { width: 200px; }
+    table { margin-top: 20px; border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    tr:hover { background: #f5f5f5; cursor: pointer; }
+    #status { margin-top: 10px; font-weight: bold; }
+    #details { margin-top: 20px; padding: 15px; border: 1px solid #ddd; }
+    pre { background: #f8f8f8; padding: 10px; }
+    .date-input { position: relative; }
+    .date-input input[type="date"]::-webkit-calendar-picker-indicator {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>Submit Data</h2>
+  <form id="dataForm">
+    <input type="text" name="Name" placeholder="Name" required><br>
+    <input type="text" name="IP" placeholder="IP"><br>
+    <input type="text" name="Location" placeholder="Location"><br>
+    <div class="date-input">
+      <input type="date" name="date" id="dateInput"><br>
+    </div>
+    <input type="text" name="device" placeholder="Device"><br>
+    <input type="text" name="Contacts" placeholder="Contacts"><br>
+    <textarea name="alldata" placeholder="Alldata"></textarea><br>
+    <button type="submit">Submit</button>
+    <p id="status"></p>
+  </form>
+
+  <hr>
+
+  <h2>Data Browser</h2>
+  <div class="filter-group">
+    <input type="password" id="accessKey" placeholder="Access Key" required>
+    <input type="text" id="filterName" placeholder="Filter by Name">
+    <input type="date" id="filterDate">
+    <input type="text" id="filterDevice" placeholder="Filter by Device">
+    <button onclick="getData()">Load Data</button>
+  </div>
+
+  <div id="dataTable"></div>
+  <div id="details">
+    <h3>Selected Row Details</h3>
+    <pre id="rowDetails">Select a row to view details</pre>
+  </div>
+
+  <script>
+    const form = document.getElementById('dataForm');
+    const status = document.getElementById('status');
+    const tableDiv = document.getElementById('dataTable');
+    const rowDetails = document.getElementById('rowDetails');
+    const dateInput = document.getElementById('dateInput');
+
+    // Format date for display
+    const formatDate = (dateString) => {
+      if (!dateString) return '';
+      const date = new Date(dateString);
+      return date.toISOString().split('T')[0];
+    };
+
+    // Form submission
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      status.textContent = 'Submitting...';
+      
+      const formData = new FormData(form);
+      const data = Object.fromEntries(formData.entries());
+      
+      // Set current date if not provided
+      if (!data.date) {
+        data.date = new Date().toISOString().split('T')[0];
+      }
+
+      try {
+        const res = await fetch('http://localhost:3000/data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+
+        const result = await res.json();
+        if (res.ok) {
+          status.textContent = '✅ Data submitted! message: ' + result.message;
+          form.reset();
+          dateInput.value = data.date; // Set default date
+        } else {
+          status.textContent = '❌ Error: ' + (result.error || 'Unknown error');
+        }
+      } catch (err) {
+        status.textContent = '❌ Connection failed. Is the server running?';
+      }
+    });
+
+    // Get filtered data
+    async function getData() {
+      const key = document.getElementById('accessKey').value.trim();
+      if (!key) return alert('❌ Access key required');
+
+      const filters = {
+        name: document.getElementById('filterName').value.trim(),
+        date: document.getElementById('filterDate').value,
+        device: document.getElementById('filterDevice').value.trim()
+      };
+
+      try {
+        const params = new URLSearchParams({ key, ...filters });
+        const res = await fetch(`http://localhost:3000/data?${params}`);
+        const { success, data, error } = await res.json();
+        console.log(`http://localhost:3000/data?${params}`);
+        if (!success) return alert(`❌ ${error || 'Failed to load data'}`);
+        console.log(data);
+        renderTable(data);
+      } catch (err) {
+        alert('❌ Network error. Check console for details');
+        console.error(err);
+      }
+    }
+
+    // Render dynamic table
+    function renderTable(rows) {
+      tableDiv.innerHTML = '';
+      if (!rows.length) {
+        tableDiv.innerHTML = 'No data found with current filters';
+        return;
+      }
+
+      // Create table element
+      const table = document.createElement('table');
+      const thead = document.createElement('thead');
+      const tbody = document.createElement('tbody');
+
+      // Generate headers from first row keys (excluding internal fields)
+      const headers = Object.keys(rows[0]).filter(key => 
+        !['user_id', 'Contacts', 'alldata'].includes(key)
+      );
+
+      // Create header row
+      const headerRow = document.createElement('tr');
+      headers.forEach(header => {
+        const th = document.createElement('th');
+        th.textContent = header.charAt(0).toUpperCase() + header.slice(1);
+        headerRow.appendChild(th);
+      });
+      thead.appendChild(headerRow);
+
+      // Create data rows
+      rows.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.dataset.id = row.id;
+
+        headers.forEach(header => {
+          const td = document.createElement('td');
+          // Format date fields
+          td.textContent = header.toLowerCase() === 'date' 
+            ? formatDate(row[header])
+            : row[header];
+          tr.appendChild(td);
+        });
+
+        tr.addEventListener('click', async () => {
+          try {
+            const res = await fetch(
+              `http://localhost:3000/data/${row.id}?key=${encodeURIComponent(
+                document.getElementById('accessKey').value
+              )}`
+            );
+            const { success, data, error } = await res.json();
+            
+            if (success) {
+              rowDetails.textContent = JSON.stringify({
+                ...data,
+                // Format nested dates
+                date: formatDate(data.date)
+              }, null, 2);
+            } else {
+              rowDetails.textContent = `Error: ${error}`;
+            }
+          } catch (err) {
+            rowDetails.textContent = 'Failed to load details';
+          }
+        });
+
+        tbody.appendChild(tr);
+      });
+
+      table.appendChild(thead);
+      table.appendChild(tbody);
+      tableDiv.appendChild(table);
+    }
+
+    // Initialize default date
+    dateInput.value = new Date().toISOString().split('T')[0];
+  </script>
+</body>
+</html>
