@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Update Database</title>
+</head>
+<body>
+    <h2>Update Database</h2>
+    <label>Name:</label>
+    <input type="text" id="name" required><br><br>
+    
+    <label>IP:</label>
+    <input type="text" id="ip" required><br><br>
+
+    <label>Date:</label>
+    <input type="date" id="date" required><br><br>
+
+    <label>Data:</label>
+    <textarea id="data" required></textarea><br><br>
+
+    <button onclick="updateDatabase()">Submit</button>
+
+    <script>
+        async function updateDatabase() {
+            const name = document.getElementById('name').value;
+            const ip = document.getElementById('ip').value;
+            const date = document.getElementById('date').value;
+            const data = document.getElementById('data').value;
+
+            const payload = { Name: name, IP: ip, Date: date, Data: data };
+console.log(payload);
+            const response = await fetch('http://localhost:3000/update-data', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.text();
+            alert(result);
+        }
+    </script>
+</body>
+</html>
